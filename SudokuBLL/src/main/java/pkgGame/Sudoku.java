@@ -560,7 +560,7 @@ public class Sudoku extends LatinSquare {
 		public Sudoku.Cell GetNextCell(Cell c){
 			int row = c.getiRow();
 			int col = c.getiCol();
-			col++;
+			col++; 
 			if(col==iSize && row < iSize - 1) {
 				row++;
 				col = 0;
