@@ -1,9 +1,18 @@
 package pkgGame;
 
-import java.security.SecureRandom;
-import java.util.Random;
-
+import pkgEnum.ePuzzleViolation;
 import pkgHelper.LatinSquare;
+import pkgHelper.PuzzleViolation;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.Objects;
+
+import org.apache.commons.lang.ArrayUtils;
 
 /**
  * Sudoku - This class extends LatinSquare, adding methods, constructor to
@@ -48,8 +57,10 @@ public class Sudoku extends LatinSquare {
 	 * @throws Exception
 	 *             if the iSize given doesn't have a whole number square root
 	 */
+	
+	private HashMap<Integer, Sudoku.Cell> hash_map = new HashMap<Integer, Sudoku.Cell>();
+	
 	public Sudoku(int iSize) throws Exception {
-
 		this.iSize = iSize;
 
 		double SQRT = Math.sqrt(iSize);
@@ -58,10 +69,6 @@ public class Sudoku extends LatinSquare {
 		} else {
 			throw new Exception("Invalid size");
 		}
-
-		int[][] puzzle = new int[iSize][iSize];
-		super.setLatinSquare(puzzle);
-		FillDiagonalRegions();
 	}
 
 	/**
@@ -72,9 +79,7 @@ public class Sudoku extends LatinSquare {
 	 * @since Lab #2
 	 * @param puzzle
 	 *            - given (working) Sudoku puzzle. Use for testing
-	 * @throws Exception
-	 *             will be thrown if the length of the puzzle do not have a whole
-	 *             number square root
+	 * @throws Exception will be thrown if the length of the puzzle do not have a whole number square root
 	 */
 	public Sudoku(int[][] puzzle) throws Exception {
 		super(puzzle);
@@ -97,33 +102,6 @@ public class Sudoku extends LatinSquare {
 	 */
 	public int[][] getPuzzle() {
 		return super.getLatinSquare();
-	}
-
-	/**
-	 * getRegionNbr - Return region number based on given column and row
-	 * 
-	 * 
-	 * Example, the following Puzzle:
-	 * 
-	 * 0 1 2 3 <br>
-	 * 1 2 3 4 <br>
-	 * 3 4 1 2 <br>
-	 * 4 1 3 2 <br>
-	 * 
-	 * getRegionNbr(3,0) should return a value of 1
-	 * 
-	 * @param iCol - Given column number
-	 * @param iRow - Given row number
-	 * @version 1.3
-	 * @since Lab #3
-	 * 
-	 * @return - return region number based on given column and row
-	 */
-	public int getRegionNbr(int iCol, int iRow) {
-
-		int i = (iCol / iSqrtSize) + ((iRow / iSqrtSize) * iSqrtSize);
-
-		return i;
 	}
 
 	/**
@@ -178,19 +156,37 @@ public class Sudoku extends LatinSquare {
 
 		int[] reg = new int[super.getLatinSquare().length];
 
-		int i = (r % iSqrtSize) * iSqrtSize;
-		int j = (r / iSqrtSize) * iSqrtSize;
-		int iMax = i + iSqrtSize;
+
+		int i = (r / iSqrtSize) * iSqrtSize;
+		int j = (r % iSqrtSize) * iSqrtSize;		
 		int jMax = j + iSqrtSize;
+		int iMax = i + iSqrtSize;
 		int iCnt = 0;
 
-		for (; j < jMax; j++) {
-			for (i = (r % iSqrtSize) * iSqrtSize; i < iMax; i++) {
-				reg[iCnt++] = super.getLatinSquare()[j][i];
+		for (; i < iMax; i++) {
+			for (j = (r % iSqrtSize) * iSqrtSize; j < jMax; j++) {
+				reg[iCnt++] = super.getLatinSquare()[i][j];
 			}
 		}
 
 		return reg;
+	}
+	
+ 
+	
+	@Override
+	public boolean hasDuplicates()
+	{
+		if (super.hasDuplicates())
+			return true;
+		
+		for (int k = 0; k < this.getPuzzle().length; k++) {
+			if (super.hasDuplicates(getRegion(k))) {
+				super.AddPuzzleViolation(new PuzzleViolation(ePuzzleViolation.DupRegion,k));
+			}
+		}
+	
+		return (super.getPV().size() > 0);
 	}
 
 	/**
@@ -207,25 +203,17 @@ public class Sudoku extends LatinSquare {
 	 */
 	public boolean isPartialSudoku() {
 
-		if (!super.isLatinSquare()) {
+		super.setbIgnoreZero(true);
+		
+		super.ClearPuzzleViolation();
+		
+		if (hasDuplicates())
+			return false;
+
+		if (!ContainsZero()) {
+			super.AddPuzzleViolation(new PuzzleViolation(ePuzzleViolation.MissingZero, -1));
 			return false;
 		}
-
-		for (int k = 0; k < this.getPuzzle().length; k++) {
-
-			if (super.hasDuplicates(getRegion(k))) {
-				return false;
-			}
-
-			if (!hasAllValues(getRow(0), getRegion(k))) {
-				return false;
-			}
-		}
-
-		if (ContainsZero()) {
-			return false;
-		}
-
 		return true;
 
 	}
@@ -237,13 +225,25 @@ public class Sudoku extends LatinSquare {
 	 * 
 	 * @version 1.2
 	 * @since Lab #2
-	 * @return - returns 'true' if it's a partialSudoku, element match (row versus
-	 *         column) and no zeros
+	 * @return - returns 'true' if it's a partialSudoku, element match (row versus column) and no zeros
 	 */
 	public boolean isSudoku() {
 
-		if (!isPartialSudoku()) {
+		this.setbIgnoreZero(false);
+		
+		super.ClearPuzzleViolation();
+		
+		if (hasDuplicates())
 			return false;
+		
+		if (!super.isLatinSquare())
+			return false;
+		
+		for (int i = 1; i < super.getLatinSquare().length; i++) {
+
+			if (!hasAllValues(getRow(0), getRegion(i))) {
+				return false;
+			}
 		}
 
 		if (ContainsZero()) {
@@ -267,7 +267,7 @@ public class Sudoku extends LatinSquare {
 	 *            given value
 	 * @return - returns 'true' if the proposed value is valid for the row and column
 	 */
-	public boolean isValidValue(int iRow,int iCol,  int iValue) {
+	public boolean isValidValue(int iCol, int iRow, int iValue) {
 		
 		if (doesElementExist(super.getRow(iRow),iValue))
 		{
@@ -284,130 +284,308 @@ public class Sudoku extends LatinSquare {
 		
 		return true;
 	}
-
+	
 	/**
-	 * PrintPuzzle This method will print the puzzle to the console (space between
-	 * columns, line break after row)
+	 * setRegion - Sets the values of the given region.
 	 * 
-	 * @version 1.3
-	 * @since Lab #3
+	 * @param r
+	 * 			integer representing region
+	 */
+	private void setRegion(int r) {
+
+		int count = 1;
+
+		int i = (r / iSqrtSize) * iSqrtSize;
+		int j = (r % iSqrtSize) * iSqrtSize;		
+		int jMax = j + iSqrtSize;
+		int iMax = i + iSqrtSize;
+
+		for (; i < iMax; i++) {
+			for (j = (r % iSqrtSize) * iSqrtSize; j < jMax; j++) {
+				this.getPuzzle()[i][j] = count++;
+			}
+		}
+		//pointless comment for changes
+		//updated
+	}
+	
+	/**
+	 * shuffleArray - Shuffles a given array.
+	 * 
+	 * @param arr
+	 * 			One dimensional integer array
+	 */
+	private void shuffleArray(int[] arr) {
+		
+		ArrayList<Integer> arrL = new ArrayList<Integer>();
+		
+		for(int i=0; i<arr.length; i++) {
+			arrL.add(arr[i]);
+		}
+		
+		Collections.shuffle(arrL);
+		Collections.shuffle(arrL);
+		
+		for(int i=0; i<arrL.size(); i++) {
+			arr[i] = arrL.get(i);
+		}
+	}
+	
+	/**
+	 * getRegionNbr - Return region number based on given column and row
+	 * 
+	 * @param iCol
+	 * 			Given column number
+	 * @param iRow
+	 * 			Given row number
+	 * @return - Returns region number based on given column and row
+	 */
+	public int getRegionNbr(int iCol, int iRow) {
+		return (iCol / iSqrtSize) + ((iRow / iSqrtSize) * iSqrtSize);
+	}
+	
+	/**
+	 * shuffleRegion - Shuffles the values of a given region
+	 * 
+	 * @param r
+	 * 		region number
+	 */
+	private void shuffleRegion(int r) {
+		int[] reg = getRegion(r);
+		shuffleArray(reg);
+		
+		int count = 0;
+		int i = (r / iSqrtSize) * iSqrtSize;
+		int j = (r % iSqrtSize) * iSqrtSize;		
+		int jMax = j + iSqrtSize;
+		int iMax = i + iSqrtSize;
+
+		for (; i < iMax; i++) {
+			for (j = (r % iSqrtSize) * iSqrtSize; j < jMax; j++) {
+				this.getPuzzle()[i][j] = reg[count];
+				count++;
+			}
+		}
+	}
+	
+	/**
+	 * FillDiagonalRegions - Set the diagonal regions with random values
+	 */
+	private void FillDiagonalRegions() {
+		for(int i = 0; i < iSize; i += iSqrtSize) {
+			int rNum = getRegionNbr(i,i);
+			setRegion(rNum);
+			shuffleRegion(rNum);
+		}
+	}
+	
+	/**
+	 * PrintPuzzle - This method will print the puzzle to the console 
 	 */
 	public void PrintPuzzle() {
-		for (int i = 0; i < this.getPuzzle().length; i++) {
+		int puzzle[][] = this.getPuzzle();
+		for (int i = 0; i < puzzle.length; i++) {
 			System.out.println("");
-			for (int j = 0; j < this.getPuzzle().length; j++) {
-				System.out.print(this.getPuzzle()[i][j]);
+			for (int j = 0; j < puzzle.length; j++) {
+				System.out.print(puzzle[i][j]);
 				if ((j + 1) % iSqrtSize == 0)
 					System.out.print(" ");
 			}
 			if ((i + 1) % iSqrtSize == 0)
 				System.out.println(" ");
-
-		}
-		System.out.println("");
-	}
-
-	/**
-	 * FillDiagonalRegions - After the puzzle is created, set the diagonal regions
-	 * with random values
-	 * 
-	 * @version 1.3
-	 * @since Lab #3
-	 */
-	private void FillDiagonalRegions() {
-
-		for (int i = 0; i < iSize; i = i + iSqrtSize) {
-			System.out.println("Filling region: " + getRegionNbr(i, i));
-			SetRegion(getRegionNbr(i, i));
-			ShuffleRegion(getRegionNbr(i, i));
 		}
 	}
-
-	/**
-	 * SetRegion - purpose of this method is to set the values of a given region
-	 * (they will be shuffled later)
+	
+	/*
+	 * getAllValidCellValues - gets iCol and iRow and returns a hashset containing
+	 * all the valid values for that cell
 	 * 
-	 * Example, the following Puzzle start state:
+	 * @param iCol
+	 * @param iRow
 	 * 
-	 * 0 0 0 0 <br>
-	 * 0 0 0 0 <br>
-	 * 0 0 0 0 <br>
-	 * 0 0 0 0 <br>
-	 * 
-	 * SetRegion(2) would transform the Puzzle to:<br>
-	 * 
-	 * 0 0 0 0 <br>
-	 * 0 0 0 0 <br>
-	 * 1 2 0 0 <br>
-	 * 3 4 0 0 <br>
-	 * 
-	 * @version 1.3
-	 * @since Lab #3
-	 * @param r
-	 *            - Given region number
+	 * @return hsRange
 	 */
-	private void SetRegion(int r) {
-		int iValue = 0;
-
-		iValue = 1;
-		for (int i = (r / iSqrtSize) * iSqrtSize; i < ((r / iSqrtSize) * iSqrtSize) + iSqrtSize; i++) {
-			for (int j = (r % iSqrtSize) * iSqrtSize; j < ((r % iSqrtSize) * iSqrtSize) + iSqrtSize; j++) {
-				this.getPuzzle()[i][j] = iValue++;
+	private HashSet<Integer> getAllValidCellValues(int iCol, int iRow) {
+		HashSet<Integer> hsRange = new HashSet<Integer>();
+		for (int i = 0; i < iSize; i++) {
+			hsRange.add(i+1);
+		}
+		HashSet<Integer> hsUsedValues = new HashSet<Integer>();
+		Collections.addAll(hsUsedValues, Arrays.stream(super.getRow(iRow)).boxed().toArray(Integer[]::new));
+		Collections.addAll(hsUsedValues, Arrays.stream(super.getColumn(iCol)).boxed().toArray(Integer[]::new));
+		Collections.addAll(hsUsedValues, Arrays.stream(this.getRegion(iCol, iRow)).boxed().toArray(Integer[]::new));
+		hsRange.removeAll(hsUsedValues);
+		return hsRange;
+	}
+	
+	/*
+	 * ShowAvailableValues - prints out all the available values
+	 * 
+	 */
+	private void ShowAvailableValues() {
+		for (int iRow = 0; iRow < iSize; iRow++) {
+			for (int iCol = 0; iCol < iSize; iCol++) {
+				Sudoku.Cell c = hash_map.get(Objects.hash(iRow, iCol));
+				ArrayList<Integer> arrL = c.getLstValidValues();
+				for (int i = 0; i < arrL.size(); i++) {
+					System.out.print(" " + arrL.get(i) + " ");
+				}
+				System.out.println("");
+			}
+		}
+		
+	}
+	
+	/*
+	 * fillRemaining - gets a cell and fills the remaining values
+	 * 
+	 * @param Cell c
+	 * 
+	 * @return boolean
+	 */
+	private boolean fillRemaing(Sudoku.Cell c) {
+		if (c == null) {
+			return true;
+		}
+		for (int num : c.getLstValidValues())
+		{
+			if (isValidValue(c.getiCol(),c.getiRow(), num)) {
+				this.getPuzzle()[c.getiRow()][c.getiCol()] = num;
+				if (fillRemaing(c.GetNextCell(c)))
+					return true;
+				this.getPuzzle()[c.getiRow()][c.getiCol()] = 0;
+			}
+		}
+		return false;
+	}
+	
+	/*
+	 * setCells - creates and sets new instances of cells
+	 * 
+	 */
+	private void setCells() {
+		for (int iRow = 0; iRow < iSize; iRow++) {
+			for (int iCol = 0; iCol < iSize; iCol++) {
+				
+				Sudoku.Cell c = new Cell(iRow, iCol);
+				c.setlstValidValues(getAllValidCellValues(iCol, iRow));
+				c.ShuffleValidValues();
 			}
 		}
 	}
-
-	/**
-	 * SetRegion - purpose of this method is to set the values of a given region
-	 * (they will be shuffled later)
-	 * 
-	 * Example, the following Puzzle start state:
-	 * 
-	 * 1 2 0 0 <br>
-	 * 3 4 0 0 <br>
-	 * 0 0 0 0 <br>
-	 * 0 0 0 0 <br>
-	 * 
-	 * ShuffleRegion(0) might transform the Puzzle to:<br>
-	 * 
-	 * 2 3 0 0 <br>
-	 * 1 4 0 0 <br>
-	 * 0 0 0 0 <br>
-	 * 0 0 0 0 <br>
-	 * 
-	 * @version 1.3
-	 * @since Lab #3
-	 * @param r
-	 *            - Given region number
-	 */
-	private void ShuffleRegion(int r) {
-		int[] region = getRegion(r);
-		shuffleArray(region);
-		int iCnt = 0;
-		for (int i = (r / iSqrtSize) * iSqrtSize; i < ((r / iSqrtSize) * iSqrtSize) + iSqrtSize; i++) {
-			for (int j = (r % iSqrtSize) * iSqrtSize; j < ((r % iSqrtSize) * iSqrtSize) + iSqrtSize; j++) {
-				this.getPuzzle()[i][j] = region[iCnt++];
-			}
+	
+	private class Cell{
+		private int iRow;
+		private int iCol;
+		private java.util.ArrayList<java.lang.Integer> lstValidValues;
+		
+		public Cell(int iRow, int iCol) {
+			this.iRow = iRow;
+			this.iCol = iCol;
 		}
-	}
+		
+		/*
+		 * getiRow - returns iRow
+		 * 
+		 * @return iRow
+		 */
+		public int getiRow() {
+			return iRow;
+		}
+		
+		/*
+		 * getiCol - returns iCol
+		 * 
+		 * @return iCol
+		 */
+		public int getiCol() {
+			return iCol;
+		}
+		
+		//@Override
+		public int hashCode() {
+			return Objects.hash(iRow, iCol);
+		}
+		
+		//@Override
+		public boolean equals(java.lang.Object o) {
+			if(o instanceof Cell) {
+				Cell myCell = (Cell) o;
+				if(myCell.iRow == this.iRow && myCell.iCol == this.iCol) {
+					return true;
+				}
+			}
+			else {
+				return false;
+			}
+			return false;
+		}
+		
+		public java.util.ArrayList<java.lang.Integer> getLstValidValues(){
+			return lstValidValues;
+		}
+		
+		/*
+		 * setlstValidValues - gets a HashSet and implements it into
+		 * the list of valid values
+		 * 
+		 * @param 
+		 * 
+		 * @return lstValidValues
+		 */
+		public void setlstValidValues(HashSet<Integer> hsValidValues) {
 
-	/**
-	 * shuffleArray this method will shuffle a given one-dimension array
-	 * 
-	 * @version 1.3
-	 * @since Lab #3
-	 * @param ar
-	 *            given one-dimension array
-	 */
-	private void shuffleArray(int[] ar) {
+			lstValidValues = new ArrayList<Integer>(hsValidValues);
 
-		Random rand = new SecureRandom();
-		for (int i = ar.length - 1; i > 0; i--) {
-			int index = rand.nextInt(i + 1);
-			// Simple swap
-			int a = ar[index];
-			ar[index] = ar[i];
-			ar[i] = a;
+		}
+		
+		/* 
+		 * ShuffleValidValues - shuffles the list of valid values
+		 * 
+		 */
+		public void ShuffleValidValues() {
+			Collections.shuffle(lstValidValues);
+		}
+		
+		/*
+		 * GetNextCell - get the next cell, return null if there isn't a next cell to
+		 * find
+		 * 
+		 * @param c
+		 * 
+		 * @param iSize
+		 * 
+		 * @return Sudoku.Cell
+		 */
+		public Sudoku.Cell GetNextCell(Cell c){
+			int row = c.getiRow();
+			int col = c.getiCol();
+			col++;
+			if(col==iSize && row < iSize - 1) {
+				row++;
+				col = 0;
+			}
+			if(col == iSize && row == iSize) {
+				return null;
+			}
+			if(row < iSqrtSize && col < iSqrtSize) {
+				col = iSqrtSize;
+			}
+			else if(row < iSize - iSqrtSize && col < iSize - iSqrtSize) {
+				if(col == (int)(row / iSqrtSize)* iSqrtSize) {
+					col += iSqrtSize;
+				}
+			}
+			else {
+				if(col == iSize - iSqrtSize) {
+					col = 0;
+					row++;
+					if(row >= iSize) {
+						return null;
+					}
+				}
+			}
+			return hash_map.get(Objects.hash(row,col));
 		}
 	}
 }
